@@ -1,6 +1,4 @@
-using BuildingBlocks.Results;
-
-namespace ResultBlocks.Results;
+namespace BuildingBlocks.Results;
 
 public class ResultOfT<T>
 {
