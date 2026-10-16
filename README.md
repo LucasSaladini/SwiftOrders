@@ -228,6 +228,7 @@ SwiftOrders/
 │   │   ├── ADR-001-microservices.md
 │   │   ├── ADR-002-http-communication.md
 │   │   └── ADR-003-clean-architecture.md
+|   |   └── ADR-004-postgresql-ef-core-persistence.md
 │   │
 │   └── development/
 │       └── testing.md
@@ -327,6 +328,7 @@ ADRs document important architectural decisions and their reasoning.
 - [ADR-001: Adopt a Microservices Architecture](docs/decisions/ADR-001-microservices.md)
 - [ADR-002: Use HTTP for Inter-Service Communication](docs/decisions/ADR-002-http-communication.md)
 - [ADR-003: Adopt Clean Architecture for Internal Service Structure](docs/decisions/ADR-003-clean-architecture.md)
+- [ADR-004: Postgresql and EFCore Persistence.md.md](docs/decisions/ADR-004-postgresql-ef-core-persistence.md.md)
 
 ### Development
 
