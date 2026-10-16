@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\UserService\UserService.Application\UserService.Application.csproj" />
     <ProjectReference Include="..\..\src\UserService\UserService.Domain\UserService.Domain.csproj" />
     <ProjectReference Include="..\..\src\UserService\UserService.API\UserService.API.csproj" />
+    <ProjectReference Include="..\..\src\UserService\UserService.Infrastructure\UserService.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
