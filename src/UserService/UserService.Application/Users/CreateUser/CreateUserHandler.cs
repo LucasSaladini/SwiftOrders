@@ -22,17 +22,18 @@ public sealed class CreateUserHandler(
         }
 
         var email = command.Email.Trim();
-        var normalizedEmail = email.ToUpperInvariant();
+        Email emailValue;
 
         try
         {
-            _ = Email.Create(email);
+            emailValue = Email.Create(email);
         }
         catch (ArgumentException)
         {
             return ResultOfT<Guid>.Failure(new Error("User.InvalidEmail", "Email is invalid"));
         }
 
+        var normalizedEmail = emailValue.Value;
         var emailExists = await userRepository.ExistsByEmailAsync(normalizedEmail, cancellationToken);
 
         if (emailExists)
@@ -41,7 +42,7 @@ public sealed class CreateUserHandler(
         }
 
         var passwordHash = passwordHasher.Hash(command.Password);
-        var user = new User(email, passwordHash);
+        var user = new User(emailValue.Value, passwordHash);
 
         await userRepository.AddAsync(user, cancellationToken);
 

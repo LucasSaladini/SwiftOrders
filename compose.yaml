@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: swiftorders-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Setup POSTGRES_DB on .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Setup POSTGRES_USER on.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Setup POSTGRES_PASSWORD on .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - swiftorders_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
+volumes:
+  swiftorders_postgres_data:

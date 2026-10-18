@@ -157,8 +157,8 @@ public class CreateUserHandlerTests
 
         // Then
         Assert.True(result.IsSuccess);
-        Assert.Equal("USER@EMAIL.COM", repository.QueriedEmail);
-        Assert.Equal("User@Email.com", repository.SavedUser!.Email.Value);
+        Assert.Equal("user@email.com", repository.QueriedEmail);
+        Assert.Equal("user@email.com", repository.SavedUser!.Email.Value);
     }
 
     [Fact]

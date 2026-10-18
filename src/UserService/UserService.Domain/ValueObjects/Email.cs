@@ -21,7 +21,7 @@ public sealed class Email
         {
             var mailAddress = new MailAddress(value);
 
-            return new Email(mailAddress.Address);
+            return new Email(mailAddress.Address.ToLowerInvariant());
         }
         catch (FormatException)
         {
