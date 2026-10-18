@@ -2,8 +2,12 @@ using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using UserService.API.Middleware;
+using UserService.Infrastructure;
+using UserService.API.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddUserServiceInfrastructure(builder.Configuration);
 
 builder.Services.AddOpenApi();
 builder.Services
@@ -11,7 +15,10 @@ builder.Services
     .AddCheck(
         "self",
         () => HealthCheckResult.Healthy(),
-        tags: ["live"]);
+        tags: ["live"])
+    .AddCheck<DatabaseHealthCheck>(
+        "database",
+        tags: ["ready"]);
 
 var app = builder.Build();
 
@@ -32,7 +39,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
-    Predicate = _ => false
+    Predicate = check => check.Tags.Contains("ready")
 });
 
 app.Run();
