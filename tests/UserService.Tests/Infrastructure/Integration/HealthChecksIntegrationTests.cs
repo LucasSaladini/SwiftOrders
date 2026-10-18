@@ -13,18 +13,28 @@ public sealed class HealthChecksIntegrationTests
     _client = factory.CreateClient();
   }
 
-  [Theory]
-  [InlineData("/health/live")]
-  [InlineData("/health/ready")]
-  public async Task GetHealthEndpoint_ReturnsHealthy(string endpoint)
+
+  [Fact]
+  public async Task GetLiveHealthEndpoint_ReturnsHealthy()
   {
-    // Act
-    using var response = await _client.GetAsync(endpoint);
+    using var response = await _client.GetAsync("/health/live");
     var body = await response.Content.ReadAsStringAsync();
 
-    // Assert
     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     Assert.Equal("Healthy", body);
+    Assert.Equal(
+        "text/plain",
+        response.Content.Headers.ContentType?.MediaType);
+  }
+
+  [Fact]
+  public async Task GetReadyHealthEndpoint_ReturnsServiceUnavailable_WhenDatabaseIsUnavailable()
+  {
+    using var response = await _client.GetAsync("/health/ready");
+    var body = await response.Content.ReadAsStringAsync();
+
+    Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    Assert.Equal("Unhealthy", body);
     Assert.Equal(
         "text/plain",
         response.Content.Headers.ContentType?.MediaType);
