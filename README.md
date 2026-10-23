@@ -336,3 +336,89 @@ Development documentation describes engineering practices used by the
 project.
 
 - [Testing Strategy](docs/development/testing.md)
+
+## Local Development
+
+### Prerequisites For Local Development
+
+Before running SwiftOrders locally, ensure you have:
+
+- .NET 10 SDK.
+- Docker with the local PostgreSQL container running.
+- PostgreSQL databases named `swiftorders_dev` and `swiftorders_test`.
+- The database credentials configured through .NET User Secrets.
+
+### Database Environments
+
+SwiftOrders separates development and automated testing databases:
+
+| Environment | Database | Purpose |
+| --- | --- | --- |
+| Development | `swiftorders_dev` | Local API development and manual validation |
+| Testing | `swiftorders_test` | Automated integration tests |
+| Production | Deployment-managed | Reserved for deployed environments |
+
+**Never run local development or automated tests against the production database.**
+
+### Configure User Secrets
+
+Database connection strings and credentials must not be committed to source control.
+
+The API project uses .NET User Secrets to store local connection settings. From the repository root, configure the development connection:
+
+```bash
+dotnet user-secrets set \
+  "ConnectionStrings:DevDatabase" \
+  "Host=localhost;Port=5432;Database=swiftorders_dev;Username=YOUR_DB_USER;Password=YOUR_DB_PASSWORD" \
+  --project src/UserService/UserService.API/UserService.API.csproj
+```
+
+Configure the test connection separately:
+
+```bash
+dotnet user-secrets set \
+  "ConnectionStrings:TestDatabase" \
+  "Host=localhost;Port=5432;Database=swiftorders_test;Username=YOUR_DB_USER;Password=YOUR_DB_PASSWORD" \
+  --project src/UserService/UserService.API/UserService.API.csproj
+```
+
+Replace the username and password placeholders with your local PostgreSQL credentials. Do not commit credentials or share the output of dotnet user-secrets list.
+
+User Secrets are intended for local development and are not a production secrets-management solution.
+
+### Select an Environment
+
+Use the environment script from the repository root:
+
+```bash
+./scripts/db-env.sh
+```
+
+The script offers the following actions:
+
+1. Development — starts the UserService API using the DevDatabase connection.
+2. Automated tests — runs dotnet test SwiftOrders.slnx using the TestDatabase connection.
+3. Production — blocked for local execution.
+0. Exit — exits without running an action.
+
+The script reads the connection strings from User Secrets without printing their values. It also validates the expected database name before executing the selected action.
+
+### Run the API
+
+Select option 1 in the environment script. The API runs in the Development environment.
+
+When available, the Scalar API reference can be used to inspect and manually test the HTTP endpoints.
+
+If the configured local port is already in use, check whether another API instance is running before starting another one.
+
+### Run Automated Tests
+
+Select option 2 in the environment script. The script exports the test connection through SWIFTORDERS_TEST_CONNECTION for the duration of the test process.
+
+The test suite includes unit and integration tests. Integration tests that require PostgreSQL use swiftorders_test; health-check tests can simulate database unavailability without stopping PostgreSQL.
+
+### Database Migrations
+
+Database migrations must be applied deliberately to the intended environment. The environment script does not apply migrations automatically.
+
+Before applying a migration, verify the target database and ensure that the operation is appropriate for that environment.
