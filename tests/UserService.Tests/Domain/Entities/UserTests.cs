@@ -178,29 +178,29 @@ public class UserTests
         Assert.Equal(deletedAt, user.DeletedAt);
         Assert.Equal(updatedAt, user.UpdatedAt);
     }
-
     [Fact]
     public void Reactivate_WhenWithin15Days_ReactivatesUser()
     {
         // Arrange
         var user = new User("user@example.com", "password-hash");
-
         var deactivatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
         var reactivationTime = deactivatedAt.AddDays(10);
 
         user.Deactivate(deactivatedAt);
 
         // Act
-        user.Reactivate(reactivationTime);
+        var result = user.Reactivate(reactivationTime);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Error);
         Assert.True(user.Active);
         Assert.Null(user.DeletedAt);
+        Assert.Equal(reactivationTime, user.UpdatedAt);
     }
 
     [Fact]
-    public void Reactivate_WhenExactly15DayHavePassed_ReactivatesUser()
+    public void Reactivate_WhenExactly15DaysHavePassed_ReactivatesUser()
     {
         // Arrange
         var user = new User("user@example.com", "password-hash");
@@ -210,11 +210,14 @@ public class UserTests
         user.Deactivate(deactivatedAt);
 
         // Act
-        user.Reactivate(reactivationTime);
+        var result = user.Reactivate(reactivationTime);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Error);
         Assert.True(user.Active);
         Assert.Null(user.DeletedAt);
+        Assert.Equal(reactivationTime, user.UpdatedAt);
     }
 
     [Fact]
@@ -222,19 +225,22 @@ public class UserTests
     {
         // Arrange
         var user = new User("user@example.com", "password-hash");
-
         var deactivatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
         var reactivationTime = deactivatedAt.AddDays(16);
 
         user.Deactivate(deactivatedAt);
+        var originalUpdatedAt = user.UpdatedAt;
 
         // Act
-        user.Reactivate(reactivationTime);
+        var result = user.Reactivate(reactivationTime);
 
         // Assert
+        Assert.True(result.IsFailure);
+        Assert.NotNull(result.Error);
+        Assert.Equal("User.ReactivationWindowExpired", result.Error.Code);
         Assert.False(user.Active);
         Assert.Equal(deactivatedAt, user.DeletedAt);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
     }
 
     [Fact]
@@ -303,6 +309,75 @@ public class UserTests
         Assert.True(result.IsFailure);
         Assert.Equal(originalPasswordHash, user.PasswordHash);
         Assert.Equal(deactivatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void Reactivate_UpdatesUpdatedAt()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+
+        var deactivatedAt = new DateTime(
+            2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var reactivationTime = deactivatedAt.AddDays(5);
+
+        user.Deactivate(deactivatedAt);
+
+        // Act
+        var result = user.Reactivate(reactivationTime);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(reactivationTime, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void Reactivate_WhenUserIsAlreadyActive_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+        var originalUpdatedAt = user.UpdatedAt;
+        var reactivationTime = DateTime.UtcNow.AddDays(1);
+
+        // Act
+        var result = user.Reactivate(reactivationTime);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.NotNull(result.Error);
+        Assert.Equal("User.AlreadyActive", result.Error.Code);
+
+        Assert.True(user.Active);
+        Assert.Null(user.DeletedAt);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void Reactivate_WhenExpired_DoesNotChangeUpdatedAt()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+
+        var deactivatedAt = new DateTime(
+            2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var expiredReactivationTime = deactivatedAt.AddDays(16);
+
+        user.Deactivate(deactivatedAt);
+        var originalUpdatedAt = user.UpdatedAt;
+
+        // Act
+        var result = user.Reactivate(expiredReactivationTime);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.NotNull(result.Error);
+        Assert.Equal("User.ReactivationWindowExpired", result.Error.Code);
+
+        Assert.False(user.Active);
+        Assert.Equal(deactivatedAt, user.DeletedAt);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
     }
 
     [Fact]

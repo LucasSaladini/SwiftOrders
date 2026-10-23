@@ -51,21 +51,28 @@ public class User
         UpdatedAt = utcNow;
     }
 
-    public void Reactivate(DateTime utcNow)
+    public Result Reactivate(DateTime utcNow)
     {
-        if (Active || DeletedAt is null)
+        if (Active)
         {
-            return;
+            return Result.Failure(new Error("User.AlreadyActive", "User is already active."));
+        }
+
+        if (DeletedAt is null)
+        {
+            return Result.Failure(new Error("User.NotDeactivated", "User has no deactivation timestamp"));
         }
 
         if (DeletedAt.Value.AddDays(15) < utcNow)
         {
-            return;
+            return Result.Failure(new Error("User.ReactivationWindowExpired", "The user reactivation window has expired."));
         }
 
         Active = true;
         DeletedAt = null;
         UpdatedAt = utcNow;
+
+        return Result.Success();
     }
 
     public Result ChangePassword(string newPasswordHash, DateTime utcNow)
