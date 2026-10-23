@@ -7,6 +7,7 @@ using UserService.Domain.Abstractions;
 using UserService.Infrastructure.Persistence;
 using UserService.Infrastructure.Persistence.Repositories;
 using UserService.Infrastructure.Time;
+using UserService.Infrastructure.Security;
 
 namespace UserService.Infrastructure;
 
@@ -24,6 +25,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();
         services.AddSingleton<IClock, SystemClock>();
 
         return services;
