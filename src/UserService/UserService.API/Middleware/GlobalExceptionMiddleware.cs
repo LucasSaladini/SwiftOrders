@@ -3,8 +3,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace UserService.API.Middleware;
 
+/// <summary>
+/// Handles unhandled exceptions thrown while processing HTTP requests.
+/// </summary>
+/// <param name="next">The next middleware in the request pipeline.</param>
+/// <param name="logger">The logger used to record exception details.</param>
 public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
 {
+    /// <summary>
+    /// Invokes the next middleware and handles unhandled exceptions.
+    /// </summary>
+    /// <param name="context">The current HTTP request context.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
         try

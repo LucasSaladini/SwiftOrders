@@ -39,6 +39,13 @@ public class GlobalExceptionMiddlewareTests
             problemDetails.Detail);
         Assert.Equal("/users", problemDetails.Instance);
         Assert.NotEqual("Sensitive internal details", problemDetails.Detail);
+        
+        context.Response.Body.Position = 0;
+
+        using var reader = new StreamReader(context.Response.Body);
+        var responseBody = await reader.ReadToEndAsync();
+
+        Assert.DoesNotContain("Sensitive internal details", responseBody);
     }
 
     [Fact]
