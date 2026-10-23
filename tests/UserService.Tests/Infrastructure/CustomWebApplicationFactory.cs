@@ -8,10 +8,15 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        var connectionString =
+            Environment.GetEnvironmentVariable("SWIFTORDERS_TEST_CONNECTION")
+            ?? throw new InvalidOperationException(
+                "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
+
+        builder.UseEnvironment("Testing");
 
         builder.UseSetting(
             "ConnectionStrings:UserDatabase",
-            "Host=localhost;Database=swiftorders_test;Username=test;Password=test");
+            connectionString);
     }
 }
