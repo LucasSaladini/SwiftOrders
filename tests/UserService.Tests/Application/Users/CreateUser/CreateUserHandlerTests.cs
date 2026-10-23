@@ -168,7 +168,7 @@ public class CreateUserHandlerTests
         var repository = new FakeUserRepository();
         var passwordHasher = new FailingPasswordHash();
         var handler = new CreateUserHandler(repository, passwordHasher);
-        
+
         var command = new CreateUserCommand("user@email.com", "ValidPassword123!");
 
         // Act & Assert
@@ -247,6 +247,31 @@ internal sealed class FailingLookupUserRepository : IUserRepository
     {
         throw new InvalidOperationException("AddAsync should not be called");
     }
+
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<User?>(null);
+    }
+
+    public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public async Task<IReadOnlyList<User>> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        return Array.Empty<User>();
+    }
+
+    public Task<IReadOnlyList<User>> GetInactiveAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FailingAddUserRepository : IUserRepository
@@ -264,6 +289,31 @@ internal sealed class FailingAddUserRepository : IUserRepository
 
         throw new InvalidOperationException("User persistence failed");
     }
+
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<User?>(null);
+    }
+
+    public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public async Task<IReadOnlyList<User>> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        return Array.Empty<User>();
+    }
+
+    public Task<IReadOnlyList<User>> GetInactiveAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FakeUserRepository : IUserRepository
@@ -273,22 +323,43 @@ internal sealed class FakeUserRepository : IUserRepository
     public User? SavedUser { get; private set; }
     public string? QueriedEmail { get; private set; }
 
-    public Task<bool> ExistsByEmailAsync(
-        string normalizedEmail,
-        CancellationToken cancellationToken)
+    public Task<bool> ExistsByEmailAsync(string normalizedEmail, CancellationToken cancellationToken)
     {
         QueriedEmail = normalizedEmail;
 
         return Task.FromResult(EmailExists);
     }
 
-    public Task AddAsync(
-        User user,
-        CancellationToken cancellationToken)
+    public Task AddAsync(User user, CancellationToken cancellationToken)
     {
         SavedUser = user;
         AddCallCount++;
 
+        return Task.CompletedTask;
+    }
+
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<User?>(null);
+    }
+
+    public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public async Task<IReadOnlyList<User>> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        return Array.Empty<User>();
+    }
+
+    public Task<IReadOnlyList<User>> GetInactiveAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<User>>(Array.Empty<User>());
+    }
+
+    public Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
         return Task.CompletedTask;
     }
 }

@@ -23,4 +23,31 @@ public sealed class UserRepository(UserDbContext dbContext) : IUserRepository
         await dbContext.Users.AddAsync(user, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return dbContext.Users.FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.Users.AsNoTracking().ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<User>> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.Users.AsNoTracking().Where(user => user.Active).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<User>> GetInactiveAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.Users.AsNoTracking().Where(user => !user.Active).ToListAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
+        dbContext.Users.Update(user);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 }

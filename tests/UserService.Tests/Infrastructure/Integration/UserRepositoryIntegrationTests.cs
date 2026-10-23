@@ -51,4 +51,77 @@ public sealed class UserRepositoryIntegrationTests
           .ExecuteDeleteAsync();
     }
   }
+
+  [Fact]
+  public async Task UpdateAsync_PersistsUserReactivation()
+  {
+    var connectionString =
+        Environment.GetEnvironmentVariable("SWIFTORDERS_TEST_CONNECTION")
+        ?? throw new InvalidOperationException(
+            "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
+
+    var options = new DbContextOptionsBuilder<UserDbContext>()
+        .UseNpgsql(connectionString)
+        .Options;
+
+    var user = new User(
+        $"reactivation-{Guid.NewGuid():N}@example.com",
+        "integration-test-password-hash");
+
+    var userId = user.Id;
+
+    try
+    {
+      // Arrange: persist an inactive user.
+      await using (var context = new UserDbContext(options))
+      {
+        var repository = new UserRepository(context);
+
+        user.Deactivate(DateTime.UtcNow.AddDays(-5));
+
+        await repository.AddAsync(user, CancellationToken.None);
+      }
+
+      // Act: reactivate and persist the user.
+      await using (var context = new UserDbContext(options))
+      {
+        var repository = new UserRepository(context);
+
+        var persistedUser = await repository.GetByIdAsync(
+            userId,
+            CancellationToken.None);
+
+        Assert.NotNull(persistedUser);
+        Assert.False(persistedUser.Active);
+
+        var result = persistedUser.Reactivate(DateTime.UtcNow);
+
+        Assert.True(result.IsSuccess);
+
+        await repository.UpdateAsync(
+            persistedUser,
+            CancellationToken.None);
+      }
+
+      // Assert: verify the persisted state with a fresh context.
+      await using (var context = new UserDbContext(options))
+      {
+        var persistedUser = await context.Users
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == userId);
+
+        Assert.True(persistedUser.Active);
+        Assert.Null(persistedUser.DeletedAt);
+      }
+    }
+    finally
+    {
+      await using var cleanupContext = new UserDbContext(options);
+
+      await cleanupContext.Users
+          .Where(item => item.Id == userId)
+          .ExecuteDeleteAsync();
+    }
+  }
+
 }
