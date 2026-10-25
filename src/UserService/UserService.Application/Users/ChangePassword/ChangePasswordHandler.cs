@@ -55,5 +55,5 @@ public sealed class ChangePasswordHandler(IUserRepository userRepository, IPassw
     await userRepository.UpdateAsync(user, cancellationToken);
 
     return Result.Success();
-  } 
+  }
 }
