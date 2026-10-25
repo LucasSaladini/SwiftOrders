@@ -13,4 +13,14 @@ public sealed class IdentityPasswordHasher : IPasswordHasher
 
         return _passwordHasher.HashPassword(new object(), password);
     }
+
+    public bool Verify(string passwordHash, string password)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+
+        var result = _passwordHasher.VerifyHashedPassword(new object(), passwordHash, password);
+
+        return result != PasswordVerificationResult.Failed;
+    }
 }

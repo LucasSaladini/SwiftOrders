@@ -11,6 +11,7 @@ using UserService.Application.Users.GetActiveUsers;
 using UserService.Application.Users.GetInactiveUsers;
 using UserService.Application.Users.DeleteUser;
 using UserService.Application.Users.ReactivateUser;
+using UserService.Application.Users.ChangePassword;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +48,7 @@ builder.Services.AddScoped<GetActiveUsersHandler>();
 builder.Services.AddScoped<GetInactiveUsersHandler>();
 builder.Services.AddScoped<DeleteUserHandler>();
 builder.Services.AddScoped<ReactivateUserHandler>();
+builder.Services.AddScoped<ChangePasswordHandler>();
 
 var app = builder.Build();
 
@@ -58,7 +60,10 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

@@ -226,6 +226,11 @@ internal sealed class FakePasswordHasher : IPasswordHasher
 
         return "fake-password-hash";
     }
+
+    public bool Verify(string passwordHash, string password)
+    {
+        return passwordHash == Hash(password);
+    }
 }
 
 internal sealed class FailingPasswordHash : IPasswordHasher
@@ -233,6 +238,11 @@ internal sealed class FailingPasswordHash : IPasswordHasher
     public string Hash(string password)
     {
         throw new InvalidOperationException("Hashing failed.");
+    }
+
+    public bool Verify(string passwordHash, string password)
+    {
+        return passwordHash == Hash(password);
     }
 }
 

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using UserService.Application.Users.ChangePassword;
 using UserService.Application.Users.CreateUser;
 using UserService.Application.Users.DeleteUser;
 using UserService.Application.Users.GetActiveUsers;
@@ -21,7 +22,8 @@ public sealed class UsersController(
   GetActiveUsersHandler getActiveUsersHandler,
   GetInactiveUsersHandler getInactiveUsersHandler,
   DeleteUserHandler deleteUserHandler,
-  ReactivateUserHandler reactivateUserHandler) : ControllerBase
+  ReactivateUserHandler reactivateUserHandler,
+  ChangePasswordHandler changePasswordHandler) : ControllerBase
 {
   /// <summary>
   /// Registers a new user.
@@ -317,6 +319,62 @@ public sealed class UsersController(
 
     return NoContent();
   }
+
+  /// <summary>
+  /// Change a user's password after validating the current password
+  /// </summary>
+  /// <param name="id">The user's unique identifier</param>
+  /// <param name="request">The current and the new passwords</param>
+  /// <param name="cancellationToken">Token used to cancel the operation</param>
+  /// <response code="204">The password was successfully changed.</response>
+  /// <response code="400">The supplied data is invalid</response>
+  /// <response code="404">The user was not found</response>
+  /// <response code="409">The password could not be changed</response>
+  [HttpPut("{id:guid}/password")]
+  [ProducesResponseType(StatusCodes.Status204NoContent)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+  public async Task<IActionResult> ChangePassword(Guid id, [FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
+  {
+    var command = new ChangePasswordCommand(id, request.CurrentPassword, request.NewPassword);
+    var result = await changePasswordHandler.Handle(command, cancellationToken);
+
+    if (result.IsFailure)
+    {
+      return result.Error?.Code switch
+      {
+        "User.InvalidId" or "User.IncorrectCurrentPassword" or "User.InvalidCurrentPassword" or "User.InvalidPassword" => BadRequest(new ProblemDetails
+        {
+          Status = StatusCodes.Status400BadRequest,
+          Title = "Invalid password change request.",
+          Detail = result.Error.Message
+        }),
+
+        "User.NotFound" => NotFound(new ProblemDetails
+        {
+          Status = StatusCodes.Status404NotFound,
+          Title = "User not found.",
+          Detail = result.Error.Message
+        }),
+
+        "User.Inactive" or "User.PasswordUnchanged" => Conflict(new ProblemDetails
+        {
+          Status = StatusCodes.Status409Conflict,
+          Title = "Password cannot be changed.",
+          Detail = result.Error.Message
+        }),
+
+        _ => StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+        {
+          Status = StatusCodes.Status500InternalServerError,
+          Title = "An unexpected error occurred."
+        })
+      };
+    }
+
+    return NoContent();
+  }
 }
 
 /// <summary>
@@ -331,3 +389,10 @@ public sealed record CreateUserRequest(string Email, string Password);
 /// </summary>
 /// <param name="Id">The unique identifier of the newly created user.</param>
 public sealed record CreateUserResponse(Guid Id);
+
+/// <summary>
+/// Represents the data required to change a user's password.
+/// </summary>
+/// <param name="CurrentPassword">The user's current password.</param>
+/// <param name="NewPassword">The desired new password.</param>
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
