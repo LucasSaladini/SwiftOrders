@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using UserService.Application.Exceptions;
 using UserService.Domain.Entities;
 using UserService.Infrastructure.Persistence;
 using UserService.Infrastructure.Persistence.Repositories;
@@ -16,9 +17,7 @@ public sealed class UserRepositoryIntegrationTests
         ?? throw new InvalidOperationException(
             "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
 
-    var options = new DbContextOptionsBuilder<UserDbContext>()
-        .UseNpgsql(connectionString)
-        .Options;
+    var options = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(connectionString).Options;
 
     var email = $"integration-{Guid.NewGuid():N}@example.com";
     var user = new User(email, "integration-test-password-hash");
@@ -30,15 +29,11 @@ public sealed class UserRepositoryIntegrationTests
     {
       await repository.AddAsync(user, CancellationToken.None);
 
-      var exists = await repository.ExistsByEmailAsync(
-          email,
-          CancellationToken.None);
+      var exists = await repository.ExistsByEmailAsync(email, CancellationToken.None);
 
       Assert.True(exists);
 
-      var persistedUser = await context.Users
-          .AsNoTracking()
-          .SingleOrDefaultAsync(item => item.Id == user.Id);
+      var persistedUser = await context.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == user.Id);
 
       Assert.NotNull(persistedUser);
       Assert.Equal(user.Id, persistedUser.Id);
@@ -46,9 +41,7 @@ public sealed class UserRepositoryIntegrationTests
     }
     finally
     {
-      await context.Users
-          .Where(item => item.Id == user.Id)
-          .ExecuteDeleteAsync();
+      await context.Users.Where(item => item.Id == user.Id).ExecuteDeleteAsync();
     }
   }
 
@@ -60,13 +53,9 @@ public sealed class UserRepositoryIntegrationTests
         ?? throw new InvalidOperationException(
             "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
 
-    var options = new DbContextOptionsBuilder<UserDbContext>()
-        .UseNpgsql(connectionString)
-        .Options;
+    var options = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(connectionString).Options;
 
-    var user = new User(
-        $"reactivation-{Guid.NewGuid():N}@example.com",
-        "integration-test-password-hash");
+    var user = new User($"reactivation-{Guid.NewGuid():N}@example.com", "integration-test-password-hash");
 
     var userId = user.Id;
 
@@ -87,9 +76,7 @@ public sealed class UserRepositoryIntegrationTests
       {
         var repository = new UserRepository(context);
 
-        var persistedUser = await repository.GetByIdAsync(
-            userId,
-            CancellationToken.None);
+        var persistedUser = await repository.GetByIdAsync(userId, CancellationToken.None);
 
         Assert.NotNull(persistedUser);
         Assert.False(persistedUser.Active);
@@ -98,17 +85,13 @@ public sealed class UserRepositoryIntegrationTests
 
         Assert.True(result.IsSuccess);
 
-        await repository.UpdateAsync(
-            persistedUser,
-            CancellationToken.None);
+        await repository.UpdateAsync(persistedUser, CancellationToken.None);
       }
 
       // Assert: verify the persisted state with a fresh context.
       await using (var context = new UserDbContext(options))
       {
-        var persistedUser = await context.Users
-            .AsNoTracking()
-            .SingleAsync(item => item.Id == userId);
+        var persistedUser = await context.Users.AsNoTracking().SingleAsync(item => item.Id == userId);
 
         Assert.True(persistedUser.Active);
         Assert.Null(persistedUser.DeletedAt);
@@ -118,10 +101,66 @@ public sealed class UserRepositoryIntegrationTests
     {
       await using var cleanupContext = new UserDbContext(options);
 
-      await cleanupContext.Users
-          .Where(item => item.Id == userId)
-          .ExecuteDeleteAsync();
+      await cleanupContext.Users.Where(item => item.Id == userId).ExecuteDeleteAsync();
     }
   }
 
+  [Fact]
+  public async Task UpdateAsync_WhenEmailIsAlreadyUsed_ThrowsEmailAlreadyExistsException()
+  {
+    var connectionString =
+        Environment.GetEnvironmentVariable("SWIFTORDERS_TEST_CONNECTION")
+        ?? throw new InvalidOperationException(
+            "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
+
+    var options = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(connectionString).Options;
+
+    var suffix = Guid.NewGuid().ToString("N");
+    var firstEmail = $"first-{suffix}@example.com";
+    var secondEmail = $"second-{suffix}@example.com";
+
+    var firstUser = new User(firstEmail, "password-hash");
+    var secondUser = new User(secondEmail, "password-hash");
+
+    try
+    {
+      // Arrange: persist two users with different emails.
+      await using (var context = new UserDbContext(options))
+      {
+        var repository = new UserRepository(context);
+
+        await repository.AddAsync(firstUser, CancellationToken.None);
+        await repository.AddAsync(secondUser, CancellationToken.None);
+      }
+
+      // Act: change the second user's email to the first user's email.
+      await using (var context = new UserDbContext(options))
+      {
+        var repository = new UserRepository(context);
+
+        var persistedUser = await repository.GetByIdAsync(secondUser.Id, CancellationToken.None);
+
+        Assert.NotNull(persistedUser);
+
+        persistedUser.ChangeEmail(firstEmail, DateTime.UtcNow);
+
+        // Assert: PostgreSQL's unique index violation is translated.
+        await Assert.ThrowsAsync<EmailAlreadyExistsException>(() => repository.UpdateAsync(persistedUser, CancellationToken.None));
+      }
+
+      // Assert: the failed update must not change the persisted email.
+      await using (var context = new UserDbContext(options))
+      {
+        var persistedUser = await context.Users.AsNoTracking().SingleAsync(user => user.Id == secondUser.Id);
+
+        Assert.Equal(secondEmail, persistedUser.Email.Value);
+      }
+    }
+    finally
+    {
+      await using var context = new UserDbContext(options);
+
+      await context.Users.Where(user => user.Id == firstUser.Id || user.Id == secondUser.Id).ExecuteDeleteAsync();
+    }
+  }
 }

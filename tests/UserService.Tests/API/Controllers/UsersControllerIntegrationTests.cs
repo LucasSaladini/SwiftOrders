@@ -521,6 +521,299 @@ public sealed class UsersControllerIntegrationTests(
     }
 
 
+    [Fact]
+    public async Task ChangeEmail_ValidRequest_ReturnsNoContent_AndPersistsNewEmail()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        var newEmail = $"changed-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? createdUserId = null;
+
+        try
+        {
+            // Arrange: create a user through the API.
+            var createRequest = new CreateUserRequest(originalEmail, password);
+
+            var createResponse = await _client.PostAsJsonAsync("/api/users", createRequest);
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+            var createdUser = await createResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(createdUser);
+            createdUserId = createdUser.Id;
+
+            // Act: change the user's email through the API.
+            var changeEmailRequest = new ChangeEmailRequest(password, newEmail);
+
+            var changeEmailResponse = await _client.PutAsJsonAsync($"/api/users/{createdUser.Id}/email", changeEmailRequest);
+
+            // Assert: the API returns 204 No Content.
+            Assert.Equal(HttpStatusCode.NoContent, changeEmailResponse.StatusCode);
+
+            Assert.Empty(
+                await changeEmailResponse.Content.ReadAsByteArrayAsync());
+
+            // Assert: verify the new email persisted in PostgreSQL.
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == createdUser.Id);
+
+            Assert.Equal(newEmail, persistedUser.Email.Value);
+            Assert.NotEqual(originalEmail, persistedUser.Email.Value);
+        }
+        finally
+        {
+            if (createdUserId.HasValue)
+            {
+                await DeleteUserAsync(createdUserId.Value);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChangeEmail_IncorrectCurrentPassword_ReturnsBadRequest()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        var newEmail = $"changed-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? createdUserId = null;
+
+        try
+        {
+            var createResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(originalEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+            var createdUser = await createResponse.Content
+                .ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(createdUser);
+            createdUserId = createdUser.Id;
+
+            var changeResponse = await _client.PutAsJsonAsync($"/api/users/{createdUser.Id}/email", new ChangeEmailRequest("WrongPassword123!", newEmail));
+
+            Assert.Equal(HttpStatusCode.BadRequest, changeResponse.StatusCode);
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == createdUser.Id);
+
+            Assert.Equal(originalEmail, persistedUser.Email.Value);
+        }
+        finally
+        {
+            if (createdUserId.HasValue)
+            {
+                await DeleteUserAsync(createdUserId.Value);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChangeEmail_InvalidNewEmail_ReturnsBadRequest_AndDoesNotChangeEmail()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? createdUserId = null;
+
+        try
+        {
+            var createResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(originalEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+            var createdUser = await createResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(createdUser);
+            createdUserId = createdUser.Id;
+
+            var changeResponse = await _client.PutAsJsonAsync($"/api/users/{createdUser.Id}/email", new ChangeEmailRequest(password, "email-invalido"));
+
+            Assert.Equal(HttpStatusCode.BadRequest, changeResponse.StatusCode);
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == createdUser.Id);
+
+            Assert.Equal(originalEmail, persistedUser.Email.Value);
+        }
+        finally
+        {
+            if (createdUserId.HasValue)
+            {
+                await DeleteUserAsync(createdUserId.Value);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChangeEmail_EmailAlreadyInUse_ReturnsConflict_AndDoesNotChangeEmail()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        var existingEmail = $"existing-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? firstUserId = null;
+        Guid? secondUserId = null;
+
+        try
+        {
+            var firstCreateResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(originalEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, firstCreateResponse.StatusCode);
+
+            var firstUser = await firstCreateResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(firstUser);
+            firstUserId = firstUser.Id;
+
+            var secondCreateResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(existingEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, secondCreateResponse.StatusCode);
+
+            var secondUser = await secondCreateResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(secondUser);
+            secondUserId = secondUser.Id;
+
+            var changeResponse = await _client.PutAsJsonAsync($"/api/users/{firstUser.Id}/email", new ChangeEmailRequest(password, existingEmail));
+
+            Assert.Equal(HttpStatusCode.Conflict, changeResponse.StatusCode);
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedFirstUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == firstUser.Id);
+
+            var persistedSecondUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == secondUser.Id);
+
+            Assert.Equal(originalEmail, persistedFirstUser.Email.Value);
+            Assert.Equal(existingEmail, persistedSecondUser.Email.Value);
+        }
+        finally
+        {
+            if (firstUserId.HasValue)
+            {
+                await DeleteUserAsync(firstUserId.Value);
+            }
+
+            if (secondUserId.HasValue)
+            {
+                await DeleteUserAsync(secondUserId.Value);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChangeEmail_SameEmail_ReturnsConflict_AndPreservesEmail()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? createdUserId = null;
+
+        try
+        {
+            var createResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(originalEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+            var createdUser = await createResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(createdUser);
+            createdUserId = createdUser.Id;
+
+            var changeResponse = await _client.PutAsJsonAsync($"/api/users/{createdUser.Id}/email", new ChangeEmailRequest(password, originalEmail));
+
+            Assert.Equal(HttpStatusCode.Conflict, changeResponse.StatusCode);
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == createdUser.Id);
+
+            Assert.Equal(originalEmail, persistedUser.Email.Value);
+        }
+        finally
+        {
+            if (createdUserId.HasValue)
+            {
+                await DeleteUserAsync(createdUserId.Value);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChangeEmail_UserDoesNotExist_ReturnsNotFound()
+    {
+        var userId = Guid.NewGuid();
+
+        var response = await _client.PutAsJsonAsync($"/api/users/{userId}/email", new ChangeEmailRequest("StrongTestPassword123!", "new-email@example.com"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangeEmail_InactiveUser_ReturnsConflict_AndPreservesEmail()
+    {
+        var originalEmail = $"change-email-{Guid.NewGuid():N}@example.com";
+        var newEmail = $"changed-email-{Guid.NewGuid():N}@example.com";
+        const string password = "StrongTestPassword123!";
+
+        Guid? createdUserId = null;
+
+        try
+        {
+            var createResponse = await _client.PostAsJsonAsync("/api/users", new CreateUserRequest(originalEmail, password));
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+            var createdUser = await createResponse.Content.ReadFromJsonAsync<CreateUserResponse>();
+
+            Assert.NotNull(createdUser);
+            createdUserId = createdUser.Id;
+
+            // Deactivate the user through the API.
+            var deleteResponse = await _client.DeleteAsync($"/api/users/{createdUser.Id}");
+
+            Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+            // Attempt to change the email of the inactive user.
+            var changeResponse = await _client.PutAsJsonAsync($"/api/users/{createdUser.Id}/email", new ChangeEmailRequest(password, newEmail));
+
+            Assert.Equal(HttpStatusCode.Conflict, changeResponse.StatusCode);
+
+            // Verify that the email was not changed.
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(user => user.Id == createdUser.Id);
+
+            Assert.Equal(originalEmail, persistedUser.Email.Value);
+            Assert.False(persistedUser.Active);
+        }
+        finally
+        {
+            if (createdUserId.HasValue)
+            {
+                await DeleteUserAsync(createdUserId.Value);
+            }
+        }
+    }
+
     private async Task DeleteUserAsync(Guid userId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();

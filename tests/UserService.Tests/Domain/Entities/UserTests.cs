@@ -109,9 +109,10 @@ public class UserTests
         var newEmail = "new@example.com";
 
         // Act
-        user.ChangeEmail(newEmail, changedAt);
+        var result = user.ChangeEmail(newEmail, changedAt);
 
         // Assert
+        Assert.True(result.IsSuccess);
         Assert.Equal(newEmail, user.Email.Value);
     }
 
@@ -252,10 +253,81 @@ public class UserTests
         var changedAt = new DateTime(2026, 1, 10, 12, 0, 0, DateTimeKind.Utc);
 
         // Act
-        user.ChangeEmail("new@example.com", changedAt);
+        var result = user.ChangeEmail("new@example.com", changedAt);
 
         // Assert
+        Assert.True(result.IsSuccess);
         Assert.Equal(changedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void ChangeEmail_WhenUserIsInactive_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+        var deactivatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        user.Deactivate(deactivatedAt);
+
+        var originalEmail = user.Email.Value;
+        var originalUpdatedAt = user.UpdatedAt;
+
+        // Act
+        var result = user.ChangeEmail("new@example.com", deactivatedAt.AddDays(1));
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("User.Inactive", result.Error!.Code);
+        Assert.Equal(originalEmail, user.Email.Value);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void ChangeEmail_WhenEmailIsInvalid_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+        var originalEmail = user.Email.Value;
+        var originalUpdatedAt = user.UpdatedAt;
+
+        // Act
+        var result = user.ChangeEmail("invalid-email", DateTime.UtcNow);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("User.InvalidEmail", result.Error!.Code);
+        Assert.Equal(originalEmail, user.Email.Value);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void ChangeEmail_WhenEmailIsUnchanged_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+        var originalUpdatedAt = user.UpdatedAt;
+
+        // Act
+        var result = user.ChangeEmail("USER@EXAMPLE.COM", DateTime.UtcNow);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("User.EmailUnchanged", result.Error!.Code);
+        Assert.Equal("user@example.com", user.Email.Value);
+        Assert.Equal(originalUpdatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void ChangeEmail_NormalizesNewEmailToLowercase()
+    {
+        // Arrange
+        var user = new User("user@example.com", "password-hash");
+
+        // Act
+        var result = user.ChangeEmail("New.User@Example.COM", DateTime.UtcNow);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("new.user@example.com", user.Email.Value);
     }
 
     [Fact]

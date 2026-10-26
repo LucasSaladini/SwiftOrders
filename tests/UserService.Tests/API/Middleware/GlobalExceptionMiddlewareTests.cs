@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.Features;
 using UserService.API.Middleware;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using UserService.Application.Exceptions;
 
 namespace UserService.Tests.API.Middleware;
 
@@ -26,20 +27,16 @@ public class GlobalExceptionMiddlewareTests
 
         context.Response.Body.Position = 0;
 
-        var problemDetails = await JsonSerializer.DeserializeAsync<ProblemDetails>(
-            context.Response.Body,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var problemDetails = await JsonSerializer.DeserializeAsync<ProblemDetails>(context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         // Assert
         Assert.NotNull(problemDetails);
         Assert.Equal(StatusCodes.Status500InternalServerError, problemDetails.Status);
         Assert.Equal("An unexpected error occurred.", problemDetails.Title);
-        Assert.Equal(
-            "An unexpected error occurred while processing your request.",
-            problemDetails.Detail);
+        Assert.Equal("An unexpected error occurred while processing your request.", problemDetails.Detail);
         Assert.Equal("/users", problemDetails.Instance);
         Assert.NotEqual("Sensitive internal details", problemDetails.Detail);
-        
+
         context.Response.Body.Position = 0;
 
         using var reader = new StreamReader(context.Response.Body);
@@ -70,9 +67,7 @@ public class GlobalExceptionMiddlewareTests
         var logEntry = Assert.Single(logger.Entries);
 
         Assert.Equal(LogLevel.Error, logEntry.LogLevel);
-        Assert.Equal(
-            "An unhandled exception occurred while processing the request. TraceIdentifier: test-trace-123",
-            logEntry.Message);
+        Assert.Equal("An unhandled exception occurred while processing the request. TraceIdentifier: test-trace-123", logEntry.Message);
         Assert.Same(expectedException, logEntry.Exception);
     }
 
@@ -94,8 +89,7 @@ public class GlobalExceptionMiddlewareTests
         context.Features.Set<IHttpResponseFeature>(responseFeature);
 
         // Act
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => middleware.InvokeAsync(context));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context));
 
         // Assert
         Assert.Same(expectedException, exception);
@@ -156,6 +150,41 @@ public class GlobalExceptionMiddlewareTests
         Assert.Contains("aborted", logEntry.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Same(expectedException, logEntry.Exception);
     }
+
+    [Fact]
+    public async Task InvokeAsync_EmailAlreadyExistsException_ReturnsConflictProblemDetails()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/users/123/email";
+        context.Response.Body = new MemoryStream();
+
+        RequestDelegate next = _ => throw new EmailAlreadyExistsException("Email is already in use.", new InvalidOperationException("Sensitive database details"));
+
+        var middleware = new GlobalExceptionMiddleware(next, NullLogger<GlobalExceptionMiddleware>.Instance);
+
+        // Act
+        await middleware.InvokeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        Assert.Equal("application/problem+json", context.Response.ContentType);
+
+        context.Response.Body.Position = 0;
+
+        using var document = await JsonDocument.ParseAsync(context.Response.Body);
+        var problem = document.RootElement;
+
+        Assert.Equal("Email already exists.", problem.GetProperty("title").GetString());
+
+        Assert.Equal(StatusCodes.Status409Conflict, problem.GetProperty("status").GetInt32());
+
+        Assert.Equal("The email address is already in use.", problem.GetProperty("detail").GetString());
+
+        Assert.Equal("/api/users/123/email", problem.GetProperty("instance").GetString());
+
+        Assert.DoesNotContain("Sensitive database details", problem.ToString());
+    }
 }
 
 internal sealed class TestLogger<T> : ILogger<T>
@@ -167,18 +196,9 @@ internal sealed class TestLogger<T> : ILogger<T>
 
     public bool IsEnabled(LogLevel logLevel) => true;
 
-    public void Log<TState>(
-        LogLevel logLevel,
-        EventId eventId,
-        TState state,
-        Exception? exception,
-        Func<TState, Exception?, string> formatter)
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        Entries.Add(new LogEntry(
-            logLevel,
-            eventId,
-            formatter(state, exception),
-            exception));
+        Entries.Add(new LogEntry(logLevel, eventId, formatter(state, exception), exception));
     }
 }
 
@@ -203,8 +223,4 @@ internal sealed class StartedHttpResponseFeature : IHttpResponseFeature
     }
 }
 
-internal sealed record LogEntry(
-    LogLevel LogLevel,
-    EventId EventId,
-    string Message,
-    Exception? Exception);
+internal sealed record LogEntry(LogLevel LogLevel, EventId EventId, string Message, Exception? Exception);

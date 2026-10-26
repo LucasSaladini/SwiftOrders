@@ -12,6 +12,7 @@ using UserService.Application.Users.GetInactiveUsers;
 using UserService.Application.Users.DeleteUser;
 using UserService.Application.Users.ReactivateUser;
 using UserService.Application.Users.ChangePassword;
+using UserService.Application.Users.ChangeEmail;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,7 @@ builder.Services.AddScoped<GetInactiveUsersHandler>();
 builder.Services.AddScoped<DeleteUserHandler>();
 builder.Services.AddScoped<ReactivateUserHandler>();
 builder.Services.AddScoped<ChangePasswordHandler>();
+builder.Services.AddScoped<ChangeEmailHandler>();
 
 var app = builder.Build();
 

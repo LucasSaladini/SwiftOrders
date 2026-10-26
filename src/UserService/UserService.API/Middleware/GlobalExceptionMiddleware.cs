@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using UserService.Application.Exceptions;
 
 namespace UserService.API.Middleware;
 
@@ -30,6 +31,36 @@ public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<Glob
                 context.TraceIdentifier);
 
             throw;
+        }
+        catch (EmailAlreadyExistsException exception)
+        {
+            logger.LogWarning(exception,
+                "A request attempted to register an email that is already in use. Trace identifier: {TraceIdentifier}",
+                context.TraceIdentifier);
+
+            if (context.Response.HasStarted)
+            {
+                throw;
+            }
+
+            context.Response.Clear();
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            context.Response.ContentType = "application/problem+json";
+
+            var problemDetails = new ProblemDetails
+            {
+                Type = "https://www.rfc-editor.org/rfc/rfc9110#section-15.5.10",
+                Title = "Email already exists.",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "The email address is already in use.",
+                Instance = context.Request.Path.Value
+            };
+
+            await context.Response.WriteAsJsonAsync(
+                problemDetails,
+                options: (JsonSerializerOptions?)null,
+                contentType: "application/problem+json",
+                cancellationToken: context.RequestAborted);
         }
         catch (Exception exception)
         {

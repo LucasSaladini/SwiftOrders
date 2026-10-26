@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using UserService.Application.Users.ChangeEmail;
 using UserService.Application.Users.ChangePassword;
 using UserService.Application.Users.CreateUser;
 using UserService.Application.Users.DeleteUser;
@@ -23,7 +24,8 @@ public sealed class UsersController(
   GetInactiveUsersHandler getInactiveUsersHandler,
   DeleteUserHandler deleteUserHandler,
   ReactivateUserHandler reactivateUserHandler,
-  ChangePasswordHandler changePasswordHandler) : ControllerBase
+  ChangePasswordHandler changePasswordHandler,
+  ChangeEmailHandler changeEmailHandler) : ControllerBase
 {
   /// <summary>
   /// Registers a new user.
@@ -375,6 +377,66 @@ public sealed class UsersController(
 
     return NoContent();
   }
+
+  /// <summary>
+  /// Changes a user's email after validating the current password.
+  /// </summary>
+  /// <param name="id">The user's unique identifier.</param>
+  /// <param name="request">The current password and the new email address.</param>
+  /// <param name="cancellationToken">Token used to cancel the operation.</param>
+  /// <response code="204">The email was successfully changed.</response>
+  /// <response code="400">The supplied data is invalid.</response>
+  /// <response code="404">The user was not found.</response>
+  /// <response code="409">The email cannot be changed due to a conflict.</response>
+  [HttpPut("{id:guid}/email")]
+  [ProducesResponseType(StatusCodes.Status204NoContent)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+  [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+  public async Task<IActionResult> ChangeEmail(Guid id, [FromBody] ChangeEmailRequest request, CancellationToken cancellationToken)
+  {
+    var command = new ChangeEmailCommand(
+        id,
+        request.CurrentPassword,
+        request.NewEmail);
+
+    var result = await changeEmailHandler.Handle(command, cancellationToken);
+
+    if (result.IsFailure)
+    {
+      return result.Error?.Code switch
+      {
+        "User.InvalidId" or "User.CurrentPasswordIsEmpty" or "User.IncorrectCurrentPassword" or "User.InvalidEmail" => BadRequest(new ProblemDetails
+        {
+          Status = StatusCodes.Status400BadRequest,
+          Title = "Invalid email change request.",
+          Detail = result.Error.Message
+        }),
+
+        "User.NotFound" => NotFound(new ProblemDetails
+        {
+          Status = StatusCodes.Status404NotFound,
+          Title = "User not found.",
+          Detail = result.Error.Message
+        }),
+
+        "User.Inactive" or "User.EmailUnchanged" or "User.EmailAlreadyExists" => Conflict(new ProblemDetails
+        {
+          Status = StatusCodes.Status409Conflict,
+          Title = "Email cannot be changed.",
+          Detail = result.Error.Message
+        }),
+
+        _ => StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+        {
+          Status = StatusCodes.Status500InternalServerError,
+          Title = "An unexpected error occurred."
+        })
+      };
+    }
+
+    return NoContent();
+  }
 }
 
 /// <summary>
@@ -396,3 +458,10 @@ public sealed record CreateUserResponse(Guid Id);
 /// <param name="CurrentPassword">The user's current password.</param>
 /// <param name="NewPassword">The desired new password.</param>
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>
+/// Represents the data required to change a user's email.
+/// </summary>
+/// <param name="CurrentPassword">The user's current password.</param>
+/// <param name="NewEmail">The desired email address.</param>
+public sealed record ChangeEmailRequest(string CurrentPassword, string NewEmail);

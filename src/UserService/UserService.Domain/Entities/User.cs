@@ -33,10 +33,42 @@ public class User
         Active = true;
     }
 
-    public void ChangeEmail(string newEmail, DateTime utcNow)
+    public Result ChangeEmail(string newEmail, DateTime utcNow)
     {
-        Email = Email.Create(newEmail);
+        if (!Active)
+        {
+            return Result.Failure(
+                new Error(
+                    "User.Inactive",
+                    "Inactive users cannot change their email."));
+        }
+
+        Email email;
+
+        try
+        {
+            email = Email.Create(newEmail);
+        }
+        catch (ArgumentException)
+        {
+            return Result.Failure(
+                new Error(
+                    "User.InvalidEmail",
+                    "Email is invalid."));
+        }
+
+        if (Email.Value == email.Value)
+        {
+            return Result.Failure(
+                new Error(
+                    "User.EmailUnchanged",
+                    "New email must be different from the current email."));
+        }
+
+        Email = email;
         UpdatedAt = utcNow;
+
+        return Result.Success();
     }
 
     public void Deactivate(DateTime utcNow)
