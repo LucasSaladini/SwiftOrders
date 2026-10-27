@@ -163,4 +163,59 @@ public sealed class UserRepositoryIntegrationTests
       await context.Users.Where(user => user.Id == firstUser.Id || user.Id == secondUser.Id).ExecuteDeleteAsync();
     }
   }
+
+  [Fact]
+  public async Task UpdateAsync_WhenUserWasModifiedByAnotherContext_ThrowsUserConcurrencyException()
+  {
+    var connectionString = Environment.GetEnvironmentVariable("SWIFTORDERS_TEST_CONNECTION")
+    ?? throw new InvalidOperationException("Set the SWIFTORDERS_TEST_CONNECTION environment variable");
+
+    var options = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(connectionString).Options;
+    var user = new User($"concurrency-{Guid.NewGuid():N}@example.com", "initial-password-hash");
+
+    try
+    {
+      // Arrange: persist the user at version 1
+      await using (var setupContext = new UserDbContext(options))
+      {
+        var repository = new UserRepository(setupContext);
+        await repository.AddAsync(user, CancellationToken.None);
+      }
+
+      // Load the same version into two independent DbContexts
+      await using var firstContext = new UserDbContext(options);
+      await using var secondContext = new UserDbContext(options);
+
+      var firstRepository = new UserRepository(firstContext);
+      var secondRepository = new UserRepository(secondContext);
+
+      var firstUser = await firstRepository.GetByIdAsync(user.Id, CancellationToken.None);
+      var secondUser = await secondRepository.GetByIdAsync(user.Id, CancellationToken.None);
+
+      Assert.NotNull(firstUser);
+      Assert.NotNull(secondUser);
+      Assert.Equal(firstUser.Version, secondUser.Version);
+
+      // The first updated succeeds and increments the version
+      firstUser.ChangeEmail($"winner-{Guid.NewGuid():N}@example.com", DateTime.UtcNow);
+      await firstRepository.UpdateAsync(firstUser, CancellationToken.None);
+
+      // The second update still uses the original version and must fail
+      secondUser.ChangeEmail($"loser-{Guid.NewGuid():N}@example.com", DateTime.UtcNow);
+      await Assert.ThrowsAsync<UserConcurrencyException>(() => secondRepository.UpdateAsync(secondUser, CancellationToken.None));
+
+      // Verify that the first update remains persisted
+      await using var verificationContext = new UserDbContext(options);
+      var persistedUser = await verificationContext.Users.AsNoTracking().SingleAsync(item => item.Id == user.Id);
+
+      Assert.Equal(firstUser.Email.Value, persistedUser.Email.Value);
+      Assert.Equal(firstUser.Version, persistedUser.Version);
+    }
+    finally
+    {
+      await using var cleanupContext = new UserDbContext(options);
+
+      await cleanupContext.Users.Where(item => item.Id == user.Id).ExecuteDeleteAsync();
+    }
+  }
 }

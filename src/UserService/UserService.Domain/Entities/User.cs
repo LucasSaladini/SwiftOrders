@@ -7,6 +7,7 @@ namespace UserService.Domain.Entities;
 public class User
 {
     public Guid Id { get; private set; }
+    public long Version { get; private set; } = 1;
     public Email Email { get; private set; } = null!;
     public string PasswordHash { get; private set; } = null!;
     public DateTime CreatedAt { get; private set; }

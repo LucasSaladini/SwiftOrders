@@ -44,7 +44,19 @@ public sealed class UserRepository(UserDbContext dbContext) : IUserRepository
 
     public async Task UpdateAsync(User user, CancellationToken cancellationToken)
     {
-        dbContext.Users.Update(user);
+        var entry = dbContext.Entry(user);
+
+        if (entry.State == EntityState.Detached)
+        {
+            throw new InvalidOperationException("The user must be tracked by the current DbContext before updating.");
+        }
+
+        var versionProperty = entry.Property(currentUser => currentUser.Version);
+        var originalVersion = versionProperty.OriginalValue;
+
+        versionProperty.CurrentValue = checked(originalVersion + 1);
+        versionProperty.IsModified = true;
+
         await SaveChangesAsync(cancellationToken);
     }
 
@@ -53,6 +65,10 @@ public sealed class UserRepository(UserDbContext dbContext) : IUserRepository
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new UserConcurrencyException("The user was modified by another operation.", exception);
         }
         catch (DbUpdateException exception)
             when (IsEmailUniqueConstraintViolation(exception))

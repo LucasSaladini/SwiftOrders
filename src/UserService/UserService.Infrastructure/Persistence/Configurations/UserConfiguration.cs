@@ -13,6 +13,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasKey(user => user.Id);
 
+        builder.Property(user => user.Version).IsRequired().IsConcurrencyToken();
+
         builder.Property(user => user.PasswordHash)
             .IsRequired()
             .HasMaxLength(500);

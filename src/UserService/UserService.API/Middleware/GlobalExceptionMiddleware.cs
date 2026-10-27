@@ -62,6 +62,34 @@ public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<Glob
                 contentType: "application/problem+json",
                 cancellationToken: context.RequestAborted);
         }
+        catch (UserConcurrencyException exception)
+        {
+            logger.LogWarning(exception,
+                "A request attempted to update a user that was modified concurrently. Trace identifier: {TraceIdentifier}",
+                context.TraceIdentifier);
+
+            if (context.Response.HasStarted)
+                throw;
+
+            context.Response.Clear();
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            context.Response.ContentType = "application/problem+json";
+
+            var problemDetails = new ProblemDetails
+            {
+                Type = "https://www.rfc-editor.org/rfc/rfc9110#section-15.5.10",
+                Title = "User was modified.",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "The user was modified by another operation. Reload the resource and retry.",
+                Instance = context.Request.Path.Value
+            };
+
+            await context.Response.WriteAsJsonAsync(
+                problemDetails,
+                options: (JsonSerializerOptions?)null,
+                contentType: "application/problem+json",
+                cancellationToken: context.RequestAborted);
+        }
         catch (Exception exception)
         {
             logger.LogError(
