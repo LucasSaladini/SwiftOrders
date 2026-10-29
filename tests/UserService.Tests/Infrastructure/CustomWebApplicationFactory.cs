@@ -1,6 +1,7 @@
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 
 namespace UserService.Tests.Infrastructure;
 
@@ -14,6 +15,17 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 "Set the SWIFTORDERS_TEST_CONNECTION environment variable");
 
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["RateLimiting:api-read:PermitLimit"] = "10000",
+                    ["RateLimiting:user-registration:PermitLimit"] = "10000",
+                    ["RateLimiting:user-write:PermitLimit"] = "10000"
+                });
+        });
 
         builder.UseSetting(
             "ConnectionStrings:UserDatabase",

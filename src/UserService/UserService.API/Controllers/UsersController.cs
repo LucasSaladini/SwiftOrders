@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using UserService.Application.Users.ChangeEmail;
 using UserService.Application.Users.ChangePassword;
 using UserService.Application.Users.CreateUser;
@@ -41,6 +42,7 @@ public sealed class UsersController(
   /// <response code="400">The supplied email or password is invalid.</response>
   /// <response code="409">An account with this email already exists.</response>
   [HttpPost]
+  [EnableRateLimiting("user-registration")]
   [Produces("application/json")]
   [ProducesResponseType(typeof(CreateUserResponse), StatusCodes.Status201Created)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -86,6 +88,7 @@ public sealed class UsersController(
   /// <response code="400">The supplied user identifier is invalid.</response>
   /// <response code="404">No user was found with the supplied identifier.</response>
   [HttpGet("{id:guid}")]
+  [EnableRateLimiting("api-read")]
   [Produces("application/json")]
   [ProducesResponseType(typeof(GetUserByIdResponse), StatusCodes.Status200OK)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -139,18 +142,16 @@ public sealed class UsersController(
   /// The users were successfully retrieved.
   /// </response>
   [HttpGet]
+  [EnableRateLimiting("api-read")]
   [Produces("application/json")]
   [ProducesResponseType(typeof(IReadOnlyList<GetAllUsersResponse>), StatusCodes.Status200OK)]
-  public async Task<IActionResult> GetAllUsers(
-      CancellationToken cancellationToken)
+  public async Task<IActionResult> GetAllUsers(CancellationToken cancellationToken)
   {
-    var result = await getAllUsersHandler.Handle(
-        cancellationToken);
+    var result = await getAllUsersHandler.Handle(cancellationToken);
 
     if (result.IsFailure)
     {
-      return StatusCode(
-          StatusCodes.Status500InternalServerError,
+      return StatusCode(StatusCodes.Status500InternalServerError,
           new ProblemDetails
           {
             Status = StatusCodes.Status500InternalServerError,
@@ -171,17 +172,16 @@ public sealed class UsersController(
   /// The active users were successfully retrieved.
   /// </response>
   [HttpGet("active")]
+  [EnableRateLimiting("api-read")]
   [Produces("application/json")]
   [ProducesResponseType(typeof(IReadOnlyList<GetActiveUsersResponse>), StatusCodes.Status200OK)]
   public async Task<IActionResult> GetActiveUsers(CancellationToken cancellationToken)
   {
-    var result = await getActiveUsersHandler.Handle(
-        cancellationToken);
+    var result = await getActiveUsersHandler.Handle(cancellationToken);
 
     if (result.IsFailure)
     {
-      return StatusCode(
-          StatusCodes.Status500InternalServerError,
+      return StatusCode(StatusCodes.Status500InternalServerError,
           new ProblemDetails
           {
             Status = StatusCodes.Status500InternalServerError,
@@ -202,6 +202,7 @@ public sealed class UsersController(
   /// The inactive users were successfully retrieved.
   /// </response>
   [HttpGet("inactive")]
+  [EnableRateLimiting("api-read")]
   [Produces("application/json")]
   [ProducesResponseType(typeof(IReadOnlyList<GetInactiveUsersResponse>), StatusCodes.Status200OK)]
   public async Task<IActionResult> GetInactiveUsers(CancellationToken cancellationToken)
@@ -210,8 +211,7 @@ public sealed class UsersController(
 
     if (result.IsFailure)
     {
-      return StatusCode(
-          StatusCodes.Status500InternalServerError,
+      return StatusCode(StatusCodes.Status500InternalServerError,
           new ProblemDetails
           {
             Status = StatusCodes.Status500InternalServerError,
@@ -231,6 +231,7 @@ public sealed class UsersController(
   /// <response code="400">The supplied user identifier is invalid.</response>
   /// <response code="404">No user was found with the supplied identifier.</response>
   [HttpDelete("{id:guid}")]
+  [EnableRateLimiting("user-write")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -255,13 +256,11 @@ public sealed class UsersController(
           Detail = result.Error.Message
         }),
 
-        _ => StatusCode(
-          StatusCodes.Status500InternalServerError,
-          new ProblemDetails
-          {
-            Status = StatusCodes.Status500InternalServerError,
-            Title = "An unexpected error occurred.",
-          })
+        _ => StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+        {
+          Status = StatusCodes.Status500InternalServerError,
+          Title = "An unexpected error occurred.",
+        })
       };
     }
 
@@ -278,6 +277,7 @@ public sealed class UsersController(
   /// <response code="404">No user was found with the supplied identifier.</response>
   /// <response code="409">The user is already active, has an expired reactivation window, or has an inconsistent deactivation state.</response>
   [HttpPost("{id:guid}/reactivate")]
+  [EnableRateLimiting("user-write")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -333,6 +333,7 @@ public sealed class UsersController(
   /// <response code="404">The user was not found</response>
   /// <response code="409">The password could not be changed</response>
   [HttpPut("{id:guid}/password")]
+  [EnableRateLimiting("user-write")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -389,16 +390,14 @@ public sealed class UsersController(
   /// <response code="404">The user was not found.</response>
   /// <response code="409">The email cannot be changed due to a conflict.</response>
   [HttpPut("{id:guid}/email")]
+  [EnableRateLimiting("user-write")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
   [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
   public async Task<IActionResult> ChangeEmail(Guid id, [FromBody] ChangeEmailRequest request, CancellationToken cancellationToken)
   {
-    var command = new ChangeEmailCommand(
-        id,
-        request.CurrentPassword,
-        request.NewEmail);
+    var command = new ChangeEmailCommand(id, request.CurrentPassword, request.NewEmail);
 
     var result = await changeEmailHandler.Handle(command, cancellationToken);
 
